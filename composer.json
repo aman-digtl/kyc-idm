@@ -15,5 +15,20 @@
       "DigtlCo\\KycIdm\\": "src/"
     }
   },
-  "require": {}
+  "extra": {
+    "laravel": {
+      "providers": [
+        "DigtlCo\\KycIdm\\KycIdmServiceProvider"
+      ],
+      "aliases": {
+        "KycIdm": "DigtlCo\\KycIdm\\Facades\\KycIdm"
+      }
+    }
+  },
+  "require-dev": {
+    "orchestra/testbench": "^6.0"
+  },
+  "require": {
+    "guzzlehttp/guzzle": "^7.2"
+  }
 }
