@@ -1,0 +1,19 @@
+{
+  "name": "digtlco/kyc-idm",
+  "description": "Handles kyc data for processing to IDM/Acuant. Provides functions to accept kyc data, send to IDM/Acuant, receive kyc results, and logging.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "aman adriano",
+      "email": "aman@digtl.co"
+    }
+  ],
+  "minimum-stability": "dev",
+  "autoload": {
+    "psr-4": {
+      "DigtlCo\\KycIdm\\": "src/"
+    }
+  },
+  "require": {}
+}
