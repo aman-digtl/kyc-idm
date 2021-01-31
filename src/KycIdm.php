@@ -4,16 +4,29 @@ namespace DigtlCo\KycIdm;
 
 use DigtlCo\KycIdm\Models\KycLog;
 use DigtlCo\KycIdm\Models\KycUser;
+use Exception;
 use Illuminate\Http\Request;
-use GuzzleHttp\Client;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 /**
  * handles IDM processes
  */
 class KycIdm
 {
+
+    public $country;
+    public $email;
+    public $firstName;
+    public $middleInitial;
+    public $lastName;
+    public $dob;
+    public $phone;
+    // TODO:: add user address
+    public $documentTitle;
+    public $fileFront;
+    public $fileBack;
+    public $fileFace;
 
     public static function Hello($message)
     {
@@ -28,37 +41,42 @@ class KycIdm
      */
     public static function HandleKycForm(Request $request, $userID)
     {
-        $result = self::createIDM($request, $userID);
-        return $result;
+        // $result = self::createIdmUser($request, $userID);
+        // return $result;
     }
 
     /**
      * send user info (along with the image files) to IDM for kyc/aml check
+     * will create an IDM <=> user record for reference & idm log
+     * @return array ['status' => 'result', 'message' => 'description of result']
      */
-    private static function createIDM(Request $request, $userID)
+    public function createIdmUser(int $userID) 
     {
+        //perform validation/test
+        if (!$this->isValid()) throw new Exception("Kyc properties failed check prior to request submission. Please make sure all required properties are set and has valid data.", 100);
         $endpoint = 'im/account/consumer';
         $params = [
-            'bco' => $request->get('country'),
-            'man' => $request->get('email'),
-            'bfn' => $request->get('firstName'),
-            'bmn' => $request->get('middleInitial'),
-            'bln' => $request->get('lastName'),
-            'dob' => $request->get('dob'),
-            'tea' => $request->get('email'),
-            'phn' => $request->get('phone'),
-            'docType' => $request->get('documentTitle'),
-            'docCountry' => $request->get('country'),
-            'scanData' => self::encodeImage($request, 'file-front'),
-            'backsideImageData' => self::encodeImage($request, 'file-back'),
-            'faceImages' => [self::encodeImage($request, 'file-face')],
+            'bco' => $this->country,
+            'man' => $this->email,
+            'bfn' => $this->firstName,
+            'bmn' => $this->middleInitial,
+            'bln' => $this->lastName,
+            'dob' => $this->dob,
+            'tea' => $this->email,
+            'phn' => $this->phone,
+            // TODO:: add user address
+            'docType' => $this->documentTitle,
+            'docCountry' => $this->country,
+            'scanData' => self::encodeImage($this->fileFront),
+            'backsideImageData' => self::encodeImage($this->fileBack),
+            'faceImages' => [self::encodeImage($this->fileFace)],
         ];
 
         // get result from IDM
         $result = self::callIDM($endpoint, 'POST', $params);
         
         //create a new model/record with the given userID and this result
-        $user = KycUser::firstOrCreate(['user_id' => Auth::user()->id]);
+        $user = KycUser::firstOrCreate(['user_id' => $userID]);
         $user->idm_id = $result['tid'];
         $user->kyc_status = $result['state'];
         $user->save();
@@ -91,53 +109,80 @@ class KycIdm
      * @param Array $params Array of parameters to be passed to IDM
      * @param Boolean $isUpload Flag to indicate if this is an upload call or not (defaults to false)
      */
-    private static function callIDM($endpoint, $verb = 'GET', $params, $isUpload = false)
+    private static function callIDM($endpoint, $verb = 'GET', $params)
     {
 
-        $url = config('services.idm.endpoint') . $endpoint;
-        $client = new Client([
-            'base_uri' => $url,
-            'timeout' => 120.0,
-        ]);
+        $url = config('kycidm.endpoint') . $endpoint;
+        $data = json_encode($params);
 
-        if ($isUpload) {
-            $response = $client->request($verb, $url, [
-                'multipart' => [
-                    'name' => 'file',
-                    'contents' => $params, //allow single file upload
-                ],
-                'auth' => [config('services.idm.user'), config('services.idm.key')],
-            ]);
-        } else {
-            $response = $client->request($verb, $url, [
-                'json' => $params,
-                'auth' => [config('services.idm.user'), config('services.idm.key')],
-            ]);
-        }
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLINFO_HEADER_OUT, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_USERPWD, config('kycidm.user') . ':' . config('kycidm.key'));  
 
-        if ($response->getStatusCode() != 200) {
-            echo $response->getReasonPhrase();
+        // Set HTTP Header for POST request 
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($data)]
+        );
+        
+        // Submit the POST request
+        $result = curl_exec($ch);
+        
+        // Close cURL session handle
+        curl_close($ch);
+
+        if ($result == false) {
             return false;
+        } else {
+            return json_decode($result, 1);
         }
 
-        return json_decode($response->getBody()->getContents(), 1);
+        // $client = new Client([
+        //     'base_uri' => $url,
+        //     'timeout' => 120.0,
+        // ]);
+
+        // if ($isUpload) {
+        //     $response = $client->request($verb, $url, [
+        //         'multipart' => [
+        //             'name' => 'file',
+        //             'contents' => $params, //allow single file upload
+        //         ],
+        //         'auth' => [config('kycidm.user'), config('kycidm.key')],
+        //     ]);
+        // } else {
+            // $response = $client->request($verb, $url, [
+            //     'json' => $params,
+            //     'auth' => [config('kycidm.user'), config('kycidm.key')],
+            // ]);
+        // }
+
+        // if ($response->getStatusCode() != 200) {
+        //     echo $response->getReasonPhrase();
+        //     return false;
+        // }
+
+        // return json_decode($response->getBody()->getContents(), 1);
+        
     }
 
     /**
      * Encode an image into Base64
      */
-    private static function encodeImage($request, $name)
+    private static function encodeImage($fileRequest)
     {
-        return base64_encode(file_get_contents($request->file($name)));
+        return base64_encode(file_get_contents($fileRequest));
     }
 
-    // for handling webhook requests
     /**
-     * main entry point of the webhook call
+     * Use to handle webhook request from IDM/Acuant's webhook
+     * NOTE: You can call this static function within your defined webhook handler.
      */
     public static function AcceptWebhook(Request $request)
     {
-
         self::handleCallback($request);
 
         $data = ['response' => 'OK'];
@@ -160,7 +205,8 @@ class KycIdm
 
         // verify state (and request shape)
         if (!isset($data['tid']) || !isset($data['state']) || !in_array($data['state'], ['D', 'A'])) {
-            return response()->json(['response' => 'Invalid request body'], 400);
+            // return response()->json(['response' => 'Invalid request body'], 400);
+            return false;
         }
 
         try {
@@ -170,8 +216,10 @@ class KycIdm
             self::logIdmAction($user->id, $data['state'], $data);
 
             // RewardController::VerifyKyc($user);
+            return true;
         } catch (ModelNotFoundException $e) {
-            return response()->json(['response' => 'User not found'], 404);
+            // return response()->json(['response' => 'User not found'], 404);
+            return false;
         }
     }
 
@@ -207,9 +255,23 @@ class KycIdm
     private static function logIdmAction ($user_id, $status, $raw) 
     {
         $log = new KycLog();
-        $log->user = $user_id;
+        $log->idm_user_id = $user_id;
         $log->status = $status;
         $log->raw = json_encode($raw);
         $log->save();
     }
+
+    /**
+     * Check if all required properties are set to make a valid requets to IDM/acuant api
+     */
+    private function isValid()
+    {
+        foreach($this as $key => $value) 
+        {
+            if (!isset($this->$key)) throw new Exception('[' . $key . '] property is not set or has a NULL value.');
+        }
+        return true;
+    
+    }
+
 }

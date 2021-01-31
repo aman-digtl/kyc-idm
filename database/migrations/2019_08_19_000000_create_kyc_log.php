@@ -16,10 +16,10 @@ class CreateKycLog extends Migration
         Schema::create('kyc_log', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->integer('user_id');
+            $table->integer('idm_user_id');
             $table->string('status', 20);
             $table->longText('raw');
-            $table->index(['user_id', 'status']);
+            $table->index(['idm_user_id', 'status']);
         });
     }
 

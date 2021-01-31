@@ -1,0 +1,58 @@
+this is wrapper for the KYC/Acuant KYC Api
+
+Install: 
+```
+composer require digtlco/kyc-idm
+```
+
+Config:
+```
+php artisan vendor:publish
+```
+Will generate the kycidm.php config file to app/config/ folder.
+
+Migrate DB:
+```
+php artisan migrate
+```
+Will generate 2 tables used for by the package : 
+- kyc_user - stores the user id (from Users table of the current system) and IDM user id and kyc result code
+- kyc_log - stores a reference to the kyc_user.id of the kyc test performed along with the raw KYC results data
+
+How to use : 
+- On your form submission handler, create a new KycIdm object and use the createIdmUser function to make the record and start a request :
+```
+public function formHandler(Request $request)
+{
+    $userId = 1; //ID of the current user filling in the form. Or you can create a new user first before performing the KYC check
+    $kycIdm = new KycIdm();
+    $kycIdm->country = $request->country;
+    $kycIdm->email = $request->email;
+    $kycIdm->firstName = $request->firstName;
+    $kycIdm->middleInitial = $request->middleInitial;
+    $kycIdm->lastName = $request->lastName;
+    $kycIdm->dob = $request->dob;
+    $kycIdm->phone = $request->phone;
+    // TODO:: add user address
+    $kycIdm->documentTitle = $request->documentTitle;
+    $kycIdm->fileFront = $request->file('file-front');
+    $kycIdm->fileBack = $request->file('file-back');
+    $kycIdm->fileFace = $request->file('file-face');
+    
+    try {
+        //this will create the kyc_user record for this user and will store the kyc result as well.
+        $result = $kycIdm->createIdmUser($userId);
+        //$result = [ 'status' => 'R|D|A', 'message' => 'description of the result status code' ];
+    } catch (\Exception $e) {
+        echo $e->getMessage();
+    }    
+
+    return response('success', 200);
+}
+
+To handle IDM's webhook call, create a function that will receive the request then call this static method within that function : 
+```
+KycIdm::AcceptWebhook
+```
+This will update the corresponding kyc_user's KYC result and creates a log of the response as well.
+

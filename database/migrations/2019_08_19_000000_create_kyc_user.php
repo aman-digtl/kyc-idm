@@ -16,7 +16,7 @@ class CreateKycUser extends Migration
         Schema::create('kyc_user', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->int('user_id');
+            $table->integer('user_id');
             $table->string('idm_id', 100);
             $table->string('kyc_status', 20);
             $table->index(['user_id', 'idm_id', 'kyc_status']);
